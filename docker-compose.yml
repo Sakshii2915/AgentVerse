@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: agentverse_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentverse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentverse}
+      POSTGRES_DB: ${POSTGRES_DB:-agentverse}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentverse -d agentverse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: agentverse_backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://agentverse:agentverse@db:5432/agentverse
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-auto}
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+      - MAX_RESEARCH_ITERATIONS=${MAX_RESEARCH_ITERATIONS:-2}
+      - MAX_SOURCES_PER_TOPIC=${MAX_SOURCES_PER_TOPIC:-5}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: agentverse_frontend
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
